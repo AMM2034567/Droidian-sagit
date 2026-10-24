@@ -74,15 +74,14 @@ jobs:
           mkdir -p kernel_source/droidian
           cp -r kernel/fragments/* kernel_source/droidian/
 
-          # Fix known Qualcomm/CAF header include bugs (<> instead of "")
-          find kernel_source/drivers/bluetooth -name '*.c' -exec sed -i -E 's/<(btfm_slim[^>]*)>/\"\1\"/g' {} +
-          echo "ccflags-y += -I\$(srctree)/drivers/bluetooth" >> kernel_source/drivers/bluetooth/Makefile
-          find kernel_source/sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
-          echo "ccflags-y += -I\$(srctree)/sound/soc/msm" >> kernel_source/sound/soc/msm/Makefile
+          # Append Qualcomm CAF include search paths to global KBUILD_CFLAGS
+          echo 'KBUILD_CFLAGS += -I$(srctree)/drivers/media/platform/msm/camera_v2 -I$(srctree)/drivers/media/platform/msm/camera_v2/common -I$(srctree)/drivers/bluetooth -I$(srctree)/sound/soc/msm -I$(srctree)/drivers/gpu/msm' >> kernel_source/Makefile
 
-          # Fix KGSL tracepoint include path
+          # Fix known Qualcomm/CAF angle bracket include bugs
+          find kernel_source/drivers/bluetooth -name '*.c' -exec sed -i -E 's/<(btfm_slim[^>]*)>/\"\1\"/g' {} +
+          find kernel_source/sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
+          find kernel_source/drivers/media/platform/msm/camera_v2 -name '*.c' -exec sed -i 's/<msm_camera_tz_util.h>/"msm_camera_tz_util.h"/g' {} +
           echo "CFLAGS_kgsl_trace.o += -I\$(src)" >> kernel_source/drivers/gpu/msm/Makefile
-          echo "ccflags-y += -I\$(src) -I\$(srctree)/drivers/gpu/msm" >> kernel_source/drivers/gpu/msm/Makefile
 
       - name: Compile Kernel Packages
         run: |
