@@ -74,6 +74,10 @@ jobs:
           mkdir -p kernel_source/droidian
           cp -r kernel/fragments/* kernel_source/droidian/
 
+          # Fix known Qualcomm/CAF header include bugs (<> instead of "")
+          find kernel_source/drivers/bluetooth -name '*.c' -exec sed -i 's/<btfm_slim.h>/"btfm_slim.h"/g' {} +
+          find kernel_source/sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
+
       - name: Compile Kernel Packages
         run: |
           cd kernel_source
@@ -81,8 +85,8 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           export CROSS_COMPILE_ARM32=arm-linux-androideabi-
 
-          # Run Debian packaging build
-          dpkg-buildpackage -b -uc -us -aarm64 || true
+          # Run Debian packaging build (-d overrides target arch check for host cross toolchain)
+          dpkg-buildpackage -d -b -uc -us -aarm64 || true
 
       - name: Prepare Artifacts & Fallback Boot Image Packaging
         run: |
