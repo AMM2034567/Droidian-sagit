@@ -131,7 +131,18 @@ jobs:
           find drivers/bluetooth -name '*.c' -exec sed -i -E 's/<(btfm_slim[^>]*)>/\"\1\"/g' {} +
           find sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
           find drivers/media/platform/msm/camera_v2 -name '*.c' -exec sed -i 's/<msm_camera_tz_util.h>/"msm_camera_tz_util.h"/g' {} +
-          echo "CFLAGS_kgsl_trace.o += -I\$(src)" >> drivers/gpu/msm/Makefile
+
+          # Fix Qualcomm local tracepoint header includes (#define TRACE_INCLUDE_PATH .)
+          for trace_header in $(find . -name '*.h' -exec grep -l '#define TRACE_INCLUDE_PATH \.' {} +); do
+            dir=$(dirname "$trace_header")
+            if [ -f "$dir/Makefile" ]; then
+              echo "Adding -I\$(src) to $dir/Makefile for $(basename $trace_header)"
+              echo "ccflags-y += -I\$(src)" >> "$dir/Makefile"
+            fi
+          done
+
+          # Pre-generate debian/control from linux-packaging-snippets template
+          make -f debian/rules debian/control
           cd ..
 
       - name: Compile Kernel Packages
