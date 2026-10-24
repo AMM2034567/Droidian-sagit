@@ -18,6 +18,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-kernel-ccache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-kernel-ccache-
+
+      - name: Cache Toolchains
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchains
+          key: ${{ runner.os }}-toolchain-gcc49-v1
+
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
@@ -40,10 +55,15 @@ jobs:
             python3 \
             python2 \
             libelf-dev \
-            abootimg
+            abootimg \
+            ccache
 
           # Setup python2 symlink for legacy Android kernel scripts
           sudo ln -sf /usr/bin/python2 /usr/bin/python || true
+
+          # Configure ccache
+          mkdir -p "$HOME/.ccache"
+          ccache -M 5G
 
           # Install standalone mkbootimg tool
           sudo curl -sSL https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg.py -o /usr/local/bin/mkbootimg
@@ -53,16 +73,28 @@ jobs:
           sudo git clone --depth=1 https://github.com/droidian/linux-packaging-snippets.git /usr/share/linux-packaging-snippets
 
       - name: Setup AOSP GCC 4.9 Toolchains
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$HOME/toolchains"
           git clone --depth=1 -b lineage-18.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 "$HOME/toolchains/aarch64-linux-android-4.9"
           git clone --depth=1 -b lineage-18.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 "$HOME/toolchains/arm-linux-androideabi-4.9"
+
+      - name: Configure ccache Wrappers & PATH
+        run: |
+          mkdir -p "$HOME/ccache_bin"
+          ln -sf /usr/bin/ccache "$HOME/ccache_bin/aarch64-linux-android-gcc"
+          ln -sf /usr/bin/ccache "$HOME/ccache_bin/aarch64-linux-android-g++"
+          ln -sf /usr/bin/ccache "$HOME/ccache_bin/arm-linux-androideabi-gcc"
+          ln -sf /usr/bin/ccache "$HOME/ccache_bin/arm-linux-androideabi-g++"
+
+          echo "$HOME/ccache_bin" >> $GITHUB_PATH
           echo "$HOME/toolchains/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
           echo "$HOME/toolchains/arm-linux-androideabi-4.9/bin" >> $GITHUB_PATH
 
-      - name: Verify Toolchain
+      - name: Verify Toolchain & ccache
         run: |
           "$HOME/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-gcc" -v
+          ccache -s
 
       - name: Clone UBports sagit (Halium 9.0) Kernel
         run: |
@@ -151,6 +183,9 @@ jobs:
             fi
             cd ..
           fi
+
+          # Display ccache stats
+          ccache -s || true
 
           ls -lh artifacts/
 
