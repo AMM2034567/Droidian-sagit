@@ -1,0 +1,21 @@
+# Temporary and build output files
+out/
+build/
+*.deb
+*.img
+*.tar.gz
+*.tar.xz
+*.zip
+*.log
+
+# Toolchains and downloaded repositories
+toolchain/
+kernel_source/
+
+# Editor / OS files
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+.DS_Store

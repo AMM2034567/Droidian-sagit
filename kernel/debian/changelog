@@ -1,0 +1,5 @@
+linux-android-xiaomi-sagit (4.4.302-1) trixie; urgency=medium
+
+  * Initial Droidian kernel package build for Xiaomi Mi 6 (sagit).
+
+ -- Droidian Porting Team <porting@droidian.org>  Sat, 24 Oct 2026 21:30:00 +0800

@@ -1,0 +1,87 @@
+name: Build Droidian Kernel for Xiaomi Mi 6 (sagit)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'kernel/**'
+      - '.github/workflows/build-kernel.yml'
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Kernel and Boot Image in Droidian Container
+        run: |
+          docker run --privileged --rm \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -w /workspace \
+            quay.io/droidian/build-essential:bookworm-amd64 \
+            bash -e -x -c "
+              echo '=== Installing packaging dependencies ==='
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                linux-packaging-snippets \
+                git \
+                curl \
+                rsync \
+                bc \
+                cpio \
+                libssl-dev \
+                kmod \
+                debhelper \
+                build-essential
+
+              echo '=== Fetching AOSP GCC 4.9 toolchains ==='
+              mkdir -p /toolchains
+              git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 /toolchains/aarch64-linux-android-4.9
+              git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 /toolchains/arm-linux-androideabi-4.9
+              export PATH=/toolchains/aarch64-linux-android-4.9/bin:/toolchains/arm-linux-androideabi-4.9/bin:\$PATH
+
+              echo '=== Cloning UBports MSM8998 (sagit) Kernel Source ==='
+              git clone --depth=1 -b halium-9.0 https://gitlab.com/ubports/porting/community-ports/android9/xiaomi-mi-6/android_kernel_xiaomi_msm8998.git kernel_source
+
+              echo '=== Preparing Debian packaging & Droidian fragments ==='
+              cp -r kernel/debian kernel_source/
+              mkdir -p kernel_source/droidian
+              cp -r kernel/fragments/* kernel_source/droidian/
+
+              echo '=== Building Droidian Kernel Debian Packages ==='
+              cd kernel_source
+              dpkg-buildpackage -b -uc -us -aarm64
+
+              echo '=== Collecting Output Artifacts ==='
+              mkdir -p /workspace/artifacts
+              cd /workspace
+              cp *.deb /workspace/artifacts/ 2>/dev/null || true
+              find kernel_source -name 'boot.img' -exec cp {} /workspace/artifacts/ \; 2>/dev/null || true
+
+              # Extract standalone boot.img from deb if not already copied directly
+              if [ ! -f /workspace/artifacts/boot.img ]; then
+                for deb in /workspace/artifacts/linux-bootimage-*.deb; do
+                  if [ -f \"\$deb\" ]; then
+                    mkdir -p /tmp/deb_extract
+                    dpkg-deb -x \"\$deb\" /tmp/deb_extract
+                    find /tmp/deb_extract -name '*.img' -exec cp {} /workspace/artifacts/boot.img \;
+                    rm -rf /tmp/deb_extract
+                    break
+                  fi
+                done
+              fi
+
+              ls -la /workspace/artifacts/
+            "
+
+      - name: Upload Kernel Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidian-kernel-sagit
+          path: artifacts/
+          if-no-files-found: error

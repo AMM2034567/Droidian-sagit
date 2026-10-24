@@ -1,0 +1,4 @@
+#!/usr/bin/make -f
+include /usr/share/linux-packaging-snippets/kernel-snippet.mk
+%:
+	dh $@
