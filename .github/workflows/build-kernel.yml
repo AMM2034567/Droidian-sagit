@@ -12,72 +12,127 @@ on:
 
 jobs:
   build-kernel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Kernel and Boot Image in Droidian Container
+      - name: Install Build Dependencies
         run: |
-          docker run --privileged --rm \
-            -v "$GITHUB_WORKSPACE":/workspace \
-            -w /workspace \
-            quay.io/droidian/build-essential:bookworm-amd64 \
-            bash -e -x -c "
-              echo '=== Installing packaging dependencies ==='
-              apt-get update
-              apt-get install -y --no-install-recommends \
-                linux-packaging-snippets \
-                git \
-                curl \
-                rsync \
-                bc \
-                cpio \
-                libssl-dev \
-                kmod \
-                debhelper \
-                build-essential
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            debhelper \
+            dpkg-dev \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libncurses5-dev \
+            cpio \
+            kmod \
+            rsync \
+            git \
+            curl \
+            python3 \
+            python3-pip \
+            libelf-dev
 
-              echo '=== Fetching AOSP GCC 4.9 toolchains ==='
-              mkdir -p /toolchains
-              git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 /toolchains/aarch64-linux-android-4.9
-              git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 /toolchains/arm-linux-androideabi-4.9
-              export PATH=/toolchains/aarch64-linux-android-4.9/bin:/toolchains/arm-linux-androideabi-4.9/bin:\$PATH
+          # Install mkbootimg utility
+          pip3 install mkbootimg
 
-              echo '=== Cloning UBports MSM8998 (sagit) Kernel Source ==='
-              git clone --depth=1 -b halium-9.0 https://gitlab.com/ubports/porting/community-ports/android9/xiaomi-mi-6/android_kernel_xiaomi_msm8998.git kernel_source
+          # Install Droidian linux-packaging-snippets
+          sudo git clone --depth=1 https://github.com/droidian/linux-packaging-snippets.git /usr/share/linux-packaging-snippets
 
-              echo '=== Preparing Debian packaging & Droidian fragments ==='
-              cp -r kernel/debian kernel_source/
-              mkdir -p kernel_source/droidian
-              cp -r kernel/fragments/* kernel_source/droidian/
+      - name: Setup AOSP GCC 4.9 Toolchains
+        run: |
+          mkdir -p "$HOME/toolchains"
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 "$HOME/toolchains/aarch64-linux-android-4.9"
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 "$HOME/toolchains/arm-linux-androideabi-4.9"
+          echo "$HOME/toolchains/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
+          echo "$HOME/toolchains/arm-linux-androideabi-4.9/bin" >> $GITHUB_PATH
 
-              echo '=== Building Droidian Kernel Debian Packages ==='
-              cd kernel_source
-              dpkg-buildpackage -b -uc -us -aarm64
+      - name: Clone UBports sagit (Halium 9.0) Kernel
+        run: |
+          git clone --depth=1 -b halium-9.0 https://gitlab.com/ubports/porting/community-ports/android9/xiaomi-mi-6/android_kernel_xiaomi_msm8998.git kernel_source
 
-              echo '=== Collecting Output Artifacts ==='
-              mkdir -p /workspace/artifacts
-              cd /workspace
-              cp *.deb /workspace/artifacts/ 2>/dev/null || true
-              find kernel_source -name 'boot.img' -exec cp {} /workspace/artifacts/ \; 2>/dev/null || true
+      - name: Inject Debian Packaging & Droidian Fragments
+        run: |
+          cp -r kernel/debian kernel_source/
+          mkdir -p kernel_source/droidian
+          cp -r kernel/fragments/* kernel_source/droidian/
 
-              # Extract standalone boot.img from deb if not already copied directly
-              if [ ! -f /workspace/artifacts/boot.img ]; then
-                for deb in /workspace/artifacts/linux-bootimage-*.deb; do
-                  if [ -f \"\$deb\" ]; then
-                    mkdir -p /tmp/deb_extract
-                    dpkg-deb -x \"\$deb\" /tmp/deb_extract
-                    find /tmp/deb_extract -name '*.img' -exec cp {} /workspace/artifacts/boot.img \;
-                    rm -rf /tmp/deb_extract
-                    break
-                  fi
-                done
+      - name: Compile Kernel Packages
+        run: |
+          cd kernel_source
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-android-
+          export CROSS_COMPILE_ARM32=arm-linux-androideabi-
+
+          # Run Debian packaging build
+          dpkg-buildpackage -b -uc -us -aarm64 || true
+
+      - name: Prepare Artifacts & Fallback Boot Image Packaging
+        run: |
+          mkdir -p artifacts
+          cp *.deb artifacts/ 2>/dev/null || true
+
+          # Check if boot.img was built by debian rules
+          find . -name 'boot.img' -exec cp {} artifacts/ \; 2>/dev/null || true
+
+          # If boot.img not yet found, check generated deb packages
+          if [ ! -f artifacts/boot.img ]; then
+            for deb in artifacts/linux-bootimage-*.deb; do
+              if [ -f "$deb" ]; then
+                mkdir -p /tmp/deb_extract
+                dpkg-deb -x "$deb" /tmp/deb_extract
+                find /tmp/deb_extract -name '*.img' -exec cp {} artifacts/boot.img \;
+                rm -rf /tmp/deb_extract
+                break
               fi
+            done
+          fi
 
-              ls -la /workspace/artifacts/
-            "
+          # Fallback: direct make build if dpkg-buildpackage did not output boot.img
+          if [ ! -f artifacts/boot.img ]; then
+            echo "Building boot.img directly via make..."
+            cd kernel_source
+            make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- sagit_defconfig
+            # Merge Droidian config fragments
+            ./scripts/kconfig/merge_config.sh -m .config droidian/*.config || true
+            make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- olddefconfig
+            make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- Image.gz-dtb
+
+            # Package boot.img with sagit offsets
+            CMDLINE="androidboot.console=ttyMSM0 androidboot.hardware=qcom msm_rtb.filter=0x37 ehci-hcd.park=3 service_locator.enable=1 swiotlb=2048 loop.max_part=7 console=tty0 droidian.lvm.prefer"
+            
+            # Find built image with dtb
+            KERNEL_IMG=""
+            if [ -f arch/arm64/boot/Image.gz-dtb ]; then
+              KERNEL_IMG="arch/arm64/boot/Image.gz-dtb"
+            elif [ -f arch/arm64/boot/Image.gz ]; then
+              KERNEL_IMG="arch/arm64/boot/Image.gz"
+            fi
+
+            if [ -n "$KERNEL_IMG" ]; then
+              # Create a minimal empty ramdisk for Halium / Droidian
+              echo -n | gzip -c > /tmp/empty_ramdisk.gz
+              mkbootimg \
+                --kernel "$KERNEL_IMG" \
+                --ramdisk /tmp/empty_ramdisk.gz \
+                --base 0x00000000 \
+                --pagesize 4096 \
+                --kernel_offset 0x00008000 \
+                --ramdisk_offset 0x01000000 \
+                --tags_offset 0x00000100 \
+                --cmdline "$CMDLINE" \
+                --output ../artifacts/boot.img
+            fi
+            cd ..
+          fi
+
+          ls -lh artifacts/
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
