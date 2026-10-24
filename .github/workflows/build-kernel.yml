@@ -58,8 +58,12 @@ jobs:
             abootimg \
             ccache
 
-          # Setup python2 symlink for legacy Android kernel scripts
+          # Setup python2 symlinks for Android kernel build & packaging scripts
           sudo ln -sf /usr/bin/python2 /usr/bin/python || true
+          sudo mkdir -p /opt/android/prebuilts/python/2.7.5/bin
+          sudo ln -sf /usr/bin/python2 /opt/android/prebuilts/python/2.7.5/bin/python
+          sudo ln -sf /usr/bin/python2 /opt/android/prebuilts/python/2.7.5/bin/python2
+          sudo ln -sf /usr/bin/python2 /opt/android/prebuilts/python/2.7.5/bin/python2.7
 
           # Configure ccache
           mkdir -p "$HOME/.ccache"
@@ -69,8 +73,18 @@ jobs:
           sudo curl -sSL https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg.py -o /usr/local/bin/mkbootimg
           sudo chmod +x /usr/local/bin/mkbootimg
 
+          # Install Droidian halium-generic-initramfs
+          curl -sSL "https://staging.repo.droidian.org/pool/main/i/initramfs-tools-halium/linux-initramfs-halium-generic_2025.04.11.0+git20260922124935.a1c2588.droidian_arm64.deb" -o /tmp/initramfs.deb
+          sudo dpkg-deb -x /tmp/initramfs.deb /
+          sudo mkdir -p /usr/lib/aarch64-linux-gnu/halium-generic-initramfs
+          if [ ! -f /usr/lib/aarch64-linux-gnu/halium-generic-initramfs/recovery-initramfs.img-halium-generic ] && [ -f /usr/lib/aarch64-linux-gnu/halium-generic-initramfs/initrd.img-halium-generic ]; then
+            sudo cp /usr/lib/aarch64-linux-gnu/halium-generic-initramfs/initrd.img-halium-generic /usr/lib/aarch64-linux-gnu/halium-generic-initramfs/recovery-initramfs.img-halium-generic
+          fi
+
           # Install Droidian linux-packaging-snippets
-          sudo git clone --depth=1 https://github.com/droidian/linux-packaging-snippets.git /usr/share/linux-packaging-snippets
+          sudo rm -rf /usr/share/linux-packaging-snippets
+          sudo git clone --depth=1 -b droidian https://github.com/droidian/linux-packaging-snippets.git /usr/share/linux-packaging-snippets
+          sudo chmod +x /usr/share/linux-packaging-snippets/*.sh || true
 
       - name: Setup AOSP GCC 4.9 Toolchains
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -102,18 +116,23 @@ jobs:
 
       - name: Inject Debian Packaging & Droidian Fragments
         run: |
-          cp -r kernel/debian kernel_source/
-          mkdir -p kernel_source/droidian
-          cp -r kernel/fragments/* kernel_source/droidian/
+          cd kernel_source
+          cp -r ../kernel/debian debian
+          mkdir -p droidian
+          cp -r ../kernel/fragments/* droidian/
 
-          # Append Qualcomm CAF include search paths to global KBUILD_CFLAGS
-          echo 'KBUILD_CFLAGS += -I$(srctree)/drivers/media/platform/msm/camera_v2 -I$(srctree)/drivers/media/platform/msm/camera_v2/common -I$(srctree)/drivers/bluetooth -I$(srctree)/sound/soc/msm -I$(srctree)/drivers/gpu/msm' >> kernel_source/Makefile
+          # Dynamically collect all camera_v2 and sound include paths for Qualcomm CAF drivers
+          CAM_INCS=$(find drivers/media/platform/msm/camera_v2 -type d | sed 's|^|-I$(srctree)/|' | tr '\n' ' ')
+          SND_INCS=$(find sound/soc/msm -type d | sed 's|^|-I$(srctree)/|' | tr '\n' ' ')
+          echo "KBUILD_CFLAGS += $CAM_INCS $SND_INCS -I\$(srctree)/drivers/bluetooth -I\$(srctree)/drivers/gpu/msm" >> Makefile
+          echo "export KBUILD_CFLAGS" >> Makefile
 
-          # Fix known Qualcomm/CAF angle bracket include bugs
-          find kernel_source/drivers/bluetooth -name '*.c' -exec sed -i -E 's/<(btfm_slim[^>]*)>/\"\1\"/g' {} +
-          find kernel_source/sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
-          find kernel_source/drivers/media/platform/msm/camera_v2 -name '*.c' -exec sed -i 's/<msm_camera_tz_util.h>/"msm_camera_tz_util.h"/g' {} +
-          echo "CFLAGS_kgsl_trace.o += -I\$(src)" >> kernel_source/drivers/gpu/msm/Makefile
+          # Fix known Qualcomm CAF angle bracket include paths
+          find drivers/bluetooth -name '*.c' -exec sed -i -E 's/<(btfm_slim[^>]*)>/\"\1\"/g' {} +
+          find sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
+          find drivers/media/platform/msm/camera_v2 -name '*.c' -exec sed -i 's/<msm_camera_tz_util.h>/"msm_camera_tz_util.h"/g' {} +
+          echo "CFLAGS_kgsl_trace.o += -I\$(src)" >> drivers/gpu/msm/Makefile
+          cd ..
 
       - name: Compile Kernel Packages
         run: |
@@ -121,19 +140,22 @@ jobs:
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           export CROSS_COMPILE_ARM32=arm-linux-androideabi-
+          export DEB_BUILD_OPTIONS="parallel=$(nproc)"
 
           # Run Debian packaging build (-d overrides target arch check for host cross toolchain)
           dpkg-buildpackage -d -b -uc -us -aarm64 || true
+          cd ..
 
       - name: Prepare Artifacts & Fallback Boot Image Packaging
         run: |
           mkdir -p artifacts
           cp *.deb artifacts/ 2>/dev/null || true
+          find kernel_source -name '*.deb' -exec cp {} artifacts/ \; 2>/dev/null || true
 
-          # Check if boot.img was built by debian rules
-          find . -name 'boot.img' -exec cp {} artifacts/ \; 2>/dev/null || true
+          # Check if boot.img was built by debian packaging
+          find kernel_source -name 'boot.img' -exec cp {} artifacts/ \; 2>/dev/null || true
 
-          # If boot.img not yet found, check generated deb packages
+          # If boot.img not yet found, extract from generated deb packages
           if [ ! -f artifacts/boot.img ]; then
             for deb in artifacts/linux-bootimage-*.deb; do
               if [ -f "$deb" ]; then
@@ -146,7 +168,7 @@ jobs:
             done
           fi
 
-          # Fallback: direct make build if dpkg-buildpackage did not output boot.img
+          # If boot.img still not found, execute fallback build directly
           if [ ! -f artifacts/boot.img ]; then
             echo "Building boot.img directly via make..."
             cd kernel_source
@@ -156,10 +178,16 @@ jobs:
             make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- olddefconfig
             make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- Image.gz-dtb
 
+            # Locate Halium initramfs
+            RAMDISK="/usr/lib/aarch64-linux-gnu/halium-generic-initramfs/initrd.img-halium-generic"
+            if [ ! -f "$RAMDISK" ]; then
+              echo -n | gzip -c > /tmp/empty_ramdisk.gz
+              RAMDISK="/tmp/empty_ramdisk.gz"
+            fi
+
             # Package boot.img with sagit offsets
             CMDLINE="androidboot.console=ttyMSM0 androidboot.hardware=qcom msm_rtb.filter=0x37 ehci-hcd.park=3 service_locator.enable=1 swiotlb=2048 loop.max_part=7 console=tty0 droidian.lvm.prefer"
             
-            # Find built image with dtb
             KERNEL_IMG=""
             if [ -f arch/arm64/boot/Image.gz-dtb ]; then
               KERNEL_IMG="arch/arm64/boot/Image.gz-dtb"
@@ -168,15 +196,14 @@ jobs:
             fi
 
             if [ -n "$KERNEL_IMG" ]; then
-              # Create a minimal empty ramdisk for Halium / Droidian
-              echo -n | gzip -c > /tmp/empty_ramdisk.gz
-              mkbootimg \
+              python3 /usr/local/bin/mkbootimg \
                 --kernel "$KERNEL_IMG" \
-                --ramdisk /tmp/empty_ramdisk.gz \
+                --ramdisk "$RAMDISK" \
                 --base 0x00000000 \
                 --pagesize 4096 \
                 --kernel_offset 0x00008000 \
                 --ramdisk_offset 0x01000000 \
+                --second_offset 0x00f00000 \
                 --tags_offset 0x00000100 \
                 --cmdline "$CMDLINE" \
                 --output ../artifacts/boot.img
