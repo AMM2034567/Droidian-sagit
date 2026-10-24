@@ -80,6 +80,10 @@ jobs:
           find kernel_source/sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
           echo "ccflags-y += -I\$(srctree)/sound/soc/msm" >> kernel_source/sound/soc/msm/Makefile
 
+          # Fix KGSL tracepoint include path
+          echo "CFLAGS_kgsl_trace.o += -I\$(src)" >> kernel_source/drivers/gpu/msm/Makefile
+          echo "ccflags-y += -I\$(src) -I\$(srctree)/drivers/gpu/msm" >> kernel_source/drivers/gpu/msm/Makefile
+
       - name: Compile Kernel Packages
         run: |
           cd kernel_source
