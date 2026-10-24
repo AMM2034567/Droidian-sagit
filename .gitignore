@@ -19,3 +19,7 @@ kernel_source/
 *~
 Thumbs.db
 .DS_Store
+
+build_output/
+*.deb
+*.img

@@ -1,0 +1,15 @@
+# Android Binder devices
+KERNEL=="binder", OWNER="root", GROUP="root", MODE="0666"
+KERNEL=="hwbinder", OWNER="root", GROUP="root", MODE="0666"
+KERNEL=="vndbinder", OWNER="root", GROUP="root", MODE="0666"
+
+# Graphics & Qualcomm Adreno 540 GPU
+KERNEL=="kgsl-3d0", OWNER="root", GROUP="video", MODE="0660"
+KERNEL=="ion", OWNER="root", GROUP="video", MODE="0660"
+
+# Audio & DSP devices
+KERNEL=="msm_cirrus_playback", OWNER="root", GROUP="audio", MODE="0660"
+KERNEL=="wcd-dsp-mgr", OWNER="root", GROUP="audio", MODE="0660"
+
+# Input devices
+KERNEL=="event*", SUBSYSTEM=="input", MODE="0660", GROUP="input"
