@@ -75,8 +75,10 @@ jobs:
           cp -r kernel/fragments/* kernel_source/droidian/
 
           # Fix known Qualcomm/CAF header include bugs (<> instead of "")
-          find kernel_source/drivers/bluetooth -name '*.c' -exec sed -i 's/<btfm_slim.h>/"btfm_slim.h"/g' {} +
+          find kernel_source/drivers/bluetooth -name '*.c' -exec sed -i -E 's/<(btfm_slim[^>]*)>/\"\1\"/g' {} +
+          echo "ccflags-y += -I\$(srctree)/drivers/bluetooth" >> kernel_source/drivers/bluetooth/Makefile
           find kernel_source/sound/soc/msm -name '*.c' -exec sed -i 's/<device_event.h>/"device_event.h"/g' {} +
+          echo "ccflags-y += -I\$(srctree)/sound/soc/msm" >> kernel_source/sound/soc/msm/Makefile
 
       - name: Compile Kernel Packages
         run: |
