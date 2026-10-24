@@ -1,0 +1,14 @@
+Source: adaptation-xiaomi-sagit
+Section: misc
+Priority: optional
+Maintainer: Droidian Sagit Porting Team <porting@droidian.org>
+Build-Depends: debhelper (>= 13), debhelper-compat (= 13)
+Standards-Version: 4.5.0
+
+Package: adaptation-xiaomi-sagit-configs
+Architecture: all
+Depends: ${misc:Depends}
+Description: Device adaptation configs for Xiaomi Mi 6 (sagit)
+ This package contains device-specific configurations for Xiaomi Mi 6,
+ including screen scaling for Phosh (5.15" 1080P), Qualcomm MSM8998
+ hardware device node permissions, and default hostname.

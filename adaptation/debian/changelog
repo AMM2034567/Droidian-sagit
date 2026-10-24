@@ -1,0 +1,5 @@
+adaptation-xiaomi-sagit (1.0.0-1) trixie; urgency=medium
+
+  * Initial release of Xiaomi Mi 6 (sagit) adaptation package.
+
+ -- Droidian Sagit Porting Team <porting@droidian.org>  Sat, 24 Oct 2026 23:30:00 +0800

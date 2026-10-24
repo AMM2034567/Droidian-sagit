@@ -23,3 +23,7 @@ Thumbs.db
 build_output/
 *.deb
 *.img
+
+staging/
+backups/
+*.part

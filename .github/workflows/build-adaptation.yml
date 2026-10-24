@@ -1,0 +1,41 @@
+name: Build Adaptation Package for Xiaomi Mi 6 (sagit)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'adaptation/**'
+      - '.github/workflows/build-adaptation.yml'
+  workflow_dispatch:
+
+jobs:
+  build-adaptation:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Debian Packaging Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            debhelper \
+            dpkg-dev \
+            build-essential
+
+      - name: Build Adaptation Debian Package
+        run: |
+          cd adaptation
+          dpkg-buildpackage -b -uc -us
+          cd ..
+          mkdir -p artifacts
+          cp *.deb artifacts/ 2>/dev/null || true
+
+      - name: Upload Adaptation Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidian-adaptation-sagit
+          path: artifacts/
