@@ -186,9 +186,13 @@ jobs:
             make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- olddefconfig
             make -j$(nproc) ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- Image.gz-dtb
 
-            # Locate Halium initramfs
+            # Locate Halium initramfs and apply sagit overlay (cust vendor mount)
             RAMDISK="/usr/lib/aarch64-linux-gnu/halium-generic-initramfs/initrd.img-halium-generic"
-            if [ ! -f "$RAMDISK" ]; then
+            if [ -d debian/initramfs-overlay ] && [ -f "$RAMDISK" ]; then
+              mkdir -p /tmp/overlay_rd
+              (cd /tmp/overlay_rd && gunzip -c "$RAMDISK" | cpio -i && cp -Rv "$GITHUB_WORKSPACE/kernel/debian/initramfs-overlay"/* . && find . | cpio -o -R 0:0 -H newc | gzip > /tmp/sagit_initrd.gz)
+              RAMDISK="/tmp/sagit_initrd.gz"
+            elif [ ! -f "$RAMDISK" ]; then
               echo -n | gzip -c > /tmp/empty_ramdisk.gz
               RAMDISK="/tmp/empty_ramdisk.gz"
             fi
