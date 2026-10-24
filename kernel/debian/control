@@ -1,0 +1,56 @@
+Source: linux-android-xiaomi-sagit
+Section: kernel
+Priority: optional
+Maintainer: Droidian porters <info@droidian.org>
+XS-Droidian-Host-Arch: arm64
+XS-Droidian-Build-On: amd64
+XS-Droidian-Compact-Changelog: yes
+Build-Depends: build-essential,
+               dpkg-dev,
+               findutils,
+               debhelper (>= 13),
+               debhelper-compat (= 13),
+               bc,
+               rsync,
+               kmod,
+               cpio,
+               bison,
+               flex,
+               libssl-dev
+Standards-Version: 4.5.0.3
+
+Package: linux-image-4.4.302-1-xiaomi-sagit
+Architecture: arm64
+Depends: ${misc:Depends}
+Description: Linux kernel for Xiaomi Mi 6
+ This package contains the Linux kernel for the Xiaomi Mi 6 device.
+
+Package: linux-bootimage-4.4.302-1-xiaomi-sagit
+Architecture: arm64
+Pre-Depends: flash-bootimage (>= 4)
+Depends: ${misc:Depends},
+         linux-image-4.4.302-1-xiaomi-sagit (= ${binary:Version})
+Description: Linux kernel for Xiaomi Mi 6 - Android Boot Image
+ This package contains the Linux kernel for the Xiaomi Mi 6 device.
+
+Package: linux-headers-4.4.302-1-xiaomi-sagit
+Architecture: arm64
+Depends: ${misc:Depends},
+         linux-image-4.4.302-1-xiaomi-sagit (= ${binary:Version})
+Description: Linux kernel for Xiaomi Mi 6 - Headers
+ This package contains the Linux kernel headers for the Xiaomi Mi 6 device.
+
+Package: linux-image-xiaomi-sagit
+Architecture: arm64
+Depends: linux-image-4.4.302-1-xiaomi-sagit (= ${binary:Version})
+Description: Linux kernel for Xiaomi Mi 6 (latest)
+
+Package: linux-bootimage-xiaomi-sagit
+Architecture: arm64
+Depends: linux-bootimage-4.4.302-1-xiaomi-sagit (= ${binary:Version})
+Description: Linux kernel for Xiaomi Mi 6 - Android Boot Image (latest)
+
+Package: linux-headers-xiaomi-sagit
+Architecture: arm64
+Depends: linux-headers-4.4.302-1-xiaomi-sagit (= ${binary:Version})
+Description: Linux kernel for Xiaomi Mi 6 - Headers (latest)

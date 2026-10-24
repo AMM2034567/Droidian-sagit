@@ -18,17 +18,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache ccache
-        uses: actions/cache@v4
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
           key: ${{ runner.os }}-kernel-ccache-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-kernel-ccache-
 
-      - name: Cache Toolchains
+      - name: Restore Toolchains
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/toolchains
           key: ${{ runner.os }}-toolchain-gcc49-v1
@@ -69,8 +69,8 @@ jobs:
           mkdir -p "$HOME/.ccache"
           ccache -M 5G
 
-          # Install standalone mkbootimg tool
-          sudo curl -sSL https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg.py -o /usr/local/bin/mkbootimg
+          # Install official AOSP mkbootimg tool (via LineageOS 18.1 python3 script)
+          sudo curl -sSL https://raw.githubusercontent.com/LineageOS/android_system_tools_mkbootimg/lineage-18.1/mkbootimg.py -o /usr/local/bin/mkbootimg
           sudo chmod +x /usr/local/bin/mkbootimg
 
           # Install Droidian halium-generic-initramfs
@@ -140,9 +140,6 @@ jobs:
               echo "ccflags-y += -I\$(src)" >> "$dir/Makefile"
             fi
           done
-
-          # Pre-generate debian/control from linux-packaging-snippets template
-          make -f debian/rules debian/control
           cd ..
 
       - name: Compile Kernel Packages
@@ -207,7 +204,7 @@ jobs:
             fi
 
             if [ -n "$KERNEL_IMG" ]; then
-              python3 /usr/local/bin/mkbootimg \
+              /usr/local/bin/mkbootimg \
                 --kernel "$KERNEL_IMG" \
                 --ramdisk "$RAMDISK" \
                 --base 0x00000000 \
@@ -228,8 +225,23 @@ jobs:
           ls -lh artifacts/
 
       - name: Upload Kernel Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: droidian-kernel-sagit
           path: artifacts/
-          if-no-files-found: error
+          if-no-files-found: ignore
+
+      - name: Save Toolchains Cache
+        if: always() && steps.cache-toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/toolchains
+          key: ${{ runner.os }}-toolchain-gcc49-v1
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-kernel-ccache-${{ github.sha }}
