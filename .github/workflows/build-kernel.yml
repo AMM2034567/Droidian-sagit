@@ -36,11 +36,12 @@ jobs:
             git \
             curl \
             python3 \
-            python3-pip \
-            libelf-dev
+            libelf-dev \
+            abootimg
 
-          # Install mkbootimg utility
-          pip3 install mkbootimg
+          # Install standalone mkbootimg tool
+          sudo curl -sSL https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg.py -o /usr/local/bin/mkbootimg
+          sudo chmod +x /usr/local/bin/mkbootimg
 
           # Install Droidian linux-packaging-snippets
           sudo git clone --depth=1 https://github.com/droidian/linux-packaging-snippets.git /usr/share/linux-packaging-snippets
