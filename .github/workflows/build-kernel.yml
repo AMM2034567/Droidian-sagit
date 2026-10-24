@@ -36,8 +36,12 @@ jobs:
             git \
             curl \
             python3 \
+            python2 \
             libelf-dev \
             abootimg
+
+          # Setup python2 symlink for legacy Android kernel scripts
+          sudo ln -sf /usr/bin/python2 /usr/bin/python || true
 
           # Install standalone mkbootimg tool
           sudo curl -sSL https://raw.githubusercontent.com/osm0sis/mkbootimg/master/mkbootimg.py -o /usr/local/bin/mkbootimg
