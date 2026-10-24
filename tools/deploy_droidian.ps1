@@ -76,14 +76,16 @@ while ($true) {
     Write-Host ""
     Write-Host "------------------- MAIN MENU -------------------" -ForegroundColor Yellow
     Write-Host "  [1] Perform Safe Full Partition Backup (boot, cust, recovery)"
-    Write-Host "  [2] Check Local Firmware & Image Files Integrity"
+    Write-Host "  [2] Check All Local Firmware & Staged Images Integrity"
     Write-Host "  [3] Flash Droidian Halium 9.0 Kernel (boot.img)"
     Write-Host "  [4] Flash Halium 9.0 Vendor (cust partition)"
-    Write-Host "  [5] Restore Partitions from Previous Backup"
+    Write-Host "  [5] Sideload Droidian Rootfs GSI (TWRP Recovery)"
+    Write-Host "  [6] Install Device Adaptation Deb Package (sagit configs)"
+    Write-Host "  [7] Restore Partitions from Previous Backup"
     Write-Host "  [Q] Exit"
     Write-Host "-------------------------------------------------" -ForegroundColor Yellow
     
-    $choice = Read-Host "Select an option [1-5, Q]"
+    $choice = Read-Host "Select an option [1-7, Q]"
 
     switch ($choice.ToUpper()) {
         "1" {
@@ -127,14 +129,17 @@ while ($true) {
         "2" {
             Write-Info "Checking local images and staging resources..."
             $filesToCheck = @(
-                @{ Name = "Droidian Kernel"; Path = "build_output\droidian-kernel-sagit\boot.img" },
-                @{ Name = "Vendor Archive"; Path = "staging\vendor.zip" }
+                @{ Name = "Droidian Kernel (boot.img)"; Path = "build_output\droidian-kernel-sagit\boot.img" },
+                @{ Name = "Device Adaptation Deb"; Path = "build_output\droidian-adaptation-sagit\adaptation-xiaomi-sagit-configs_1.0.0-1_all.deb" },
+                @{ Name = "Vendor Archive (vendor.zip)"; Path = "staging\vendor.zip" },
+                @{ Name = "Vendor Image (vendor.img)"; Path = "staging\unpacked\vendor.img" },
+                @{ Name = "Droidian Rootfs GSI Archive"; Path = "staging\droidian-OFFICIAL-phosh-phone-rootfs-api28-arm64-next_20261024.zip" }
             )
             foreach ($f in $filesToCheck) {
                 if (Test-Path $f.Path) {
                     $sz = (Get-Item $f.Path).Length / 1MB
                     $hash = (Get-FileHash $f.Path -Algorithm SHA256).Hash
-                    Write-Success "$($f.Name): Exists ($([math]::Round($sz, 2)) MB), SHA256: $hash"
+                    Write-Success "$($f.Name): Ready ($([math]::Round($sz, 2)) MB), SHA256: $hash"
                 } else {
                     Write-Warning "$($f.Name): NOT FOUND at '$($f.Path)'"
                 }
@@ -198,6 +203,50 @@ while ($true) {
         }
 
         "5" {
+            $rootfsZip = "staging\droidian-OFFICIAL-phosh-phone-rootfs-api28-arm64-next_20261024.zip"
+            if (-not (Test-Path $rootfsZip)) {
+                Write-ErrorMsg "Rootfs archive not found at '$rootfsZip'!"
+                continue
+            }
+            Write-Warning "TARGET: Sideload Droidian Rootfs GSI via TWRP Recovery."
+            Write-Host "Please ensure your phone is booted into TWRP recovery and in 'Advanced > ADB Sideload' mode." -ForegroundColor Cyan
+            $confirm = Read-Host "Type 'CONFIRM' to begin ADB sideload"
+            if ($confirm -ne "CONFIRM") {
+                Write-Info "Operation canceled."
+                continue
+            }
+            if ($DryRun) {
+                Write-Host "  [DryRun] adb sideload $rootfsZip"
+            } else {
+                Write-Info "Sideloading Droidian rootfs GSI..."
+                adb sideload $rootfsZip
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Success "Rootfs sideload completed successfully!"
+                } else {
+                    Write-ErrorMsg "Rootfs sideload failed (exit code $LASTEXITCODE)."
+                }
+            }
+        }
+
+        "6" {
+            $debPath = "build_output\droidian-adaptation-sagit\adaptation-xiaomi-sagit-configs_1.0.0-1_all.deb"
+            if (-not (Test-Path $debPath)) {
+                Write-ErrorMsg "Adaptation package not found at '$debPath'!"
+                continue
+            }
+            Write-Info "Pushing and installing adaptation package..."
+            if ($DryRun) {
+                Write-Host "  [DryRun] adb push $debPath /tmp/"
+                Write-Host "  [DryRun] adb shell dpkg -i /tmp/adaptation-xiaomi-sagit-configs_1.0.0-1_all.deb"
+            } else {
+                adb push $debPath /tmp/
+                Write-Info "Attempting to install via adb shell dpkg..."
+                adb shell "dpkg -i /tmp/adaptation-xiaomi-sagit-configs_1.0.0-1_all.deb"
+                Write-Success "Adaptation configs applied!"
+            }
+        }
+
+        "7" {
             Write-Info "Available backup folders:"
             $backups = Get-ChildItem -Path "backups" -Directory -ErrorAction SilentlyContinue
             if (-not $backups) {
