@@ -89,41 +89,12 @@ while ($true) {
 
     switch ($choice.ToUpper()) {
         "1" {
-            $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-            $backupDir = "backups\sagit_backup_$timestamp"
-            New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-            Write-Info "Starting partition backup to '$backupDir'..."
-            
-            if ($mode -ne "adb") {
-                Write-ErrorMsg "Partition backup requires ADB (Android or TWRP recovery). Current mode is '$mode'."
-                continue
+            Write-Info "Executing full hardware and firmware backup via scripts/safe_backup.py..."
+            if ($DryRun) {
+                Write-Host "  [DryRun] python scripts\safe_backup.py (DryRun simulation)"
+            } else {
+                python scripts\safe_backup.py
             }
-
-            # Partition nodes on sagit (MSM8998)
-            $partitions = @(
-                @{ Name = "boot"; Node = "/dev/block/sde40"; OutFile = "boot.img" },
-                @{ Name = "cust"; Node = "/dev/block/sde42"; OutFile = "cust.img" },
-                @{ Name = "recovery"; Node = "/dev/block/sda15"; OutFile = "recovery.img" }
-            )
-
-            foreach ($p in $partitions) {
-                Write-Info "Dumping $($p.Name) ($($p.Node))..."
-                if ($DryRun) {
-                    Write-Host "  [DryRun] adb shell su -c 'dd if=$($p.Node) of=/sdcard/$($p.OutFile) bs=4096'"
-                    Write-Host "  [DryRun] adb pull /sdcard/$($p.OutFile) $backupDir\$($p.OutFile)"
-                } else {
-                    adb shell "dd if=$($p.Node) of=/sdcard/$($p.OutFile) bs=4096 2>/dev/null"
-                    adb pull "/sdcard/$($p.OutFile)" "$backupDir\$($p.OutFile)"
-                    adb shell "rm -f /sdcard/$($p.OutFile)"
-                    if (Test-Path "$backupDir\$($p.OutFile)") {
-                        $hash = (Get-FileHash "$backupDir\$($p.OutFile)" -Algorithm SHA256).Hash
-                        Write-Success "Backup $($p.Name) verified! SHA256: $hash"
-                    } else {
-                        Write-ErrorMsg "Failed to backup $($p.Name)!"
-                    }
-                }
-            }
-            Write-Success "Backup completed: $backupDir"
         }
 
         "2" {
@@ -266,6 +237,9 @@ while ($true) {
                     if (Test-Path "$selBackup\boot.img") { fastboot flash boot "$selBackup\boot.img" }
                     if (Test-Path "$selBackup\cust.img") { fastboot flash cust "$selBackup\cust.img" }
                     if (Test-Path "$selBackup\recovery.img") { fastboot flash recovery "$selBackup\recovery.img" }
+                    if (Test-Path "$selBackup\modem.img") { fastboot flash modem "$selBackup\modem.img" }
+                    if (Test-Path "$selBackup\persist.img") { fastboot flash persist "$selBackup\persist.img" }
+                    if (Test-Path "$selBackup\splash.img") { fastboot flash splash "$selBackup\splash.img" }
                     Write-Success "Partitions restored successfully!"
                 }
             }
